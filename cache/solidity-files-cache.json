@@ -1,0 +1,597 @@
+{
+  "_format": "ethers-rs-sol-cache-3",
+  "paths": {
+    "artifacts": "out",
+    "sources": "src",
+    "tests": "test",
+    "scripts": "script",
+    "libraries": [
+      "lib"
+    ]
+  },
+  "files": {
+    "lib/forge-std/src/Script.sol": {
+      "lastModificationDate": 1660720075851,
+      "contentHash": "7d92b4b501b5bc611763f1dd981b2785",
+      "sourceName": "lib/forge-std/src/Script.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib\\forge-std\\src\\Vm.sol",
+        "lib\\forge-std\\src\\console.sol",
+        "lib\\forge-std\\src\\console2.sol"
+      ],
+      "versionRequirement": ">=0.6.0, <0.9.0",
+      "artifacts": {
+        "Script": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Script.sol\\Script.json"
+        }
+      }
+    },
+    "lib/forge-std/src/Test.sol": {
+      "lastModificationDate": 1660720075852,
+      "contentHash": "780ddff38d7531e76a3f6f83e432a2d0",
+      "sourceName": "lib/forge-std/src/Test.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/forge-std/src/Script.sol",
+        "lib\\forge-std\\src\\Vm.sol",
+        "lib\\forge-std\\src\\console.sol",
+        "lib\\forge-std\\src\\console2.sol",
+        "lib/solmate/lib/ds-test/src/test.sol"
+      ],
+      "versionRequirement": ">=0.6.0, <0.9.0",
+      "artifacts": {
+        "Test": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Test.sol\\Test.json"
+        },
+        "stdError": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Test.sol\\stdError.json"
+        },
+        "stdMath": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Test.sol\\stdMath.json"
+        },
+        "stdStorage": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Test.sol\\stdStorage.json"
+        }
+      }
+    },
+    "lib\\forge-std\\src\\Vm.sol": {
+      "lastModificationDate": 1660720075852,
+      "contentHash": "8d07cba01cffc6606764c550153779be",
+      "sourceName": "lib\\forge-std\\src\\Vm.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.6.0, <0.9.0",
+      "artifacts": {
+        "Vm": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Vm.sol\\Vm.json"
+        }
+      }
+    },
+    "lib\\forge-std\\src\\console.sol": {
+      "lastModificationDate": 1660720075853,
+      "contentHash": "c8cf989d04bc2e3069e3d91facf3b69c",
+      "sourceName": "lib\\forge-std\\src\\console.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.4.22, <0.9.0",
+      "artifacts": {
+        "console": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "console.sol\\console.json"
+        }
+      }
+    },
+    "lib\\forge-std\\src\\console2.sol": {
+      "lastModificationDate": 1660720075853,
+      "contentHash": "84e14285f3171a14073d0f81363094ac",
+      "sourceName": "lib\\forge-std\\src\\console2.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.4.22, <0.9.0",
+      "artifacts": {
+        "console2": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "console2.sol\\console2.json"
+        }
+      }
+    },
+    "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol": {
+      "lastModificationDate": 1660720179262,
+      "contentHash": "057f2d6ede3039a3b36f23c0c5c107a4",
+      "sourceName": "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib\\openzeppelin-contracts\\contracts\\utils\\introspection\\IERC165.sol"
+      ],
+      "versionRequirement": "^0.8.0",
+      "artifacts": {
+        "IERC721": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "IERC721.sol\\IERC721.json"
+        }
+      }
+    },
+    "lib\\openzeppelin-contracts\\contracts\\utils\\introspection\\IERC165.sol": {
+      "lastModificationDate": 1660720179284,
+      "contentHash": "48674212f545f00ae3efc963b05ffa18",
+      "sourceName": "lib\\openzeppelin-contracts\\contracts\\utils\\introspection\\IERC165.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": "^0.8.0",
+      "artifacts": {
+        "IERC165": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "IERC165.sol\\IERC165.json"
+        }
+      }
+    },
+    "lib/solmate/lib/ds-test/src/test.sol": {
+      "lastModificationDate": 1660720138441,
+      "contentHash": "a85cb92e605e48103a5375f81c8233f2",
+      "sourceName": "lib/solmate/lib/ds-test/src/test.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.5.0",
+      "artifacts": {
+        "DSTest": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "test.sol\\DSTest.json"
+        }
+      }
+    },
+    "lib/solmate/src/test/utils/mocks/MockERC721.sol": {
+      "lastModificationDate": 1660720136183,
+      "contentHash": "9f20e24b804c27953be7ea67488753b2",
+      "sourceName": "lib/solmate/src/test/utils/mocks/MockERC721.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/solmate/src/tokens/ERC721.sol"
+      ],
+      "versionRequirement": ">=0.8.0",
+      "artifacts": {
+        "MockERC721": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "MockERC721.sol\\MockERC721.json"
+        }
+      }
+    },
+    "lib/solmate/src/tokens/ERC721.sol": {
+      "lastModificationDate": 1660720136188,
+      "contentHash": "f32c927712356f85fe357b8a37a3ab9f",
+      "sourceName": "lib/solmate/src/tokens/ERC721.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [],
+      "versionRequirement": ">=0.8.0",
+      "artifacts": {
+        "ERC721": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "ERC721.sol\\ERC721.json"
+        },
+        "ERC721TokenReceiver": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "ERC721.sol\\ERC721TokenReceiver.json"
+        }
+      }
+    },
+    "script\\Contract.s.sol": {
+      "lastModificationDate": 1660720073750,
+      "contentHash": "3642d05d9c479368231825c40aaa276a",
+      "sourceName": "script\\Contract.s.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/forge-std/src/Script.sol",
+        "lib\\forge-std\\src\\Vm.sol",
+        "lib\\forge-std\\src\\console.sol",
+        "lib\\forge-std\\src\\console2.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "ContractScript": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Contract.s.sol\\ContractScript.json"
+        }
+      }
+    },
+    "src\\Rentable.sol": {
+      "lastModificationDate": 1660753084623,
+      "contentHash": "c930e85fb545d5a3eeb2fb65f7735bd2",
+      "sourceName": "src\\Rentable.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol",
+        "lib\\openzeppelin-contracts\\contracts\\utils\\introspection\\IERC165.sol",
+        "lib/solmate/src/tokens/ERC721.sol",
+        "src\\WrappedERC721.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "Rentable": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Rentable.sol\\Rentable.json"
+        }
+      }
+    },
+    "src\\WrappedERC721.sol": {
+      "lastModificationDate": 1660753138320,
+      "contentHash": "7236cab25d73ce789fdbda82d5143da1",
+      "sourceName": "src\\WrappedERC721.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/solmate/src/tokens/ERC721.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "WrappedERC721": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "WrappedERC721.sol\\WrappedERC721.json"
+        }
+      }
+    },
+    "test\\Contract.t.sol": {
+      "lastModificationDate": 1660754042229,
+      "contentHash": "dede9522a775e756bcaa5df7391b2fe0",
+      "sourceName": "test\\Contract.t.sol",
+      "solcConfig": {
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "metadata": {
+            "bytecodeHash": "ipfs"
+          },
+          "outputSelection": {
+            "*": {
+              "": [
+                "ast"
+              ],
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers"
+              ]
+            }
+          },
+          "evmVersion": "london",
+          "libraries": {}
+        }
+      },
+      "imports": [
+        "lib/forge-std/src/Script.sol",
+        "lib/forge-std/src/Test.sol",
+        "lib\\forge-std\\src\\Vm.sol",
+        "lib\\forge-std\\src\\console.sol",
+        "lib\\forge-std\\src\\console2.sol",
+        "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol",
+        "lib\\openzeppelin-contracts\\contracts\\utils\\introspection\\IERC165.sol",
+        "lib/solmate/lib/ds-test/src/test.sol",
+        "lib/solmate/src/test/utils/mocks/MockERC721.sol",
+        "lib/solmate/src/tokens/ERC721.sol",
+        "src\\Rentable.sol",
+        "src\\WrappedERC721.sol"
+      ],
+      "versionRequirement": "^0.8.13",
+      "artifacts": {
+        "ContractTest": {
+          "0.8.15+commit.e14f2714.Windows.msvc": "Contract.t.sol\\ContractTest.json"
+        }
+      }
+    }
+  }
+}
