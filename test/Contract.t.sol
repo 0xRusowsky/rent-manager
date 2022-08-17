@@ -48,6 +48,8 @@ contract ContractTest is Test {
         emit log_named_uint("Alice balance after rent", alice.balance);
 
         WrappedERC721 wrapped = WrappedERC721(rentable.getWrapped(address(nft)));
+        assert(nft.ownerOf(1) == address(wrapped));
+        assert(wrapped.ownerOf(1) == bob);
         assert(wrapped.balanceOf(bob) == 1);
 
         emit log_named_uint("Bob balance before rent", bob.balance);

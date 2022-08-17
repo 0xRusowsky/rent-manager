@@ -63,6 +63,8 @@ contract Rentable {
     }
 
     function startRental(address collection, uint256 id) external payable {
+        ERC721 nft = ERC721(collection);
+
         rentalData memory rent = _getRental[collection][id];
         require(rent.fee == msg.value, "WRONG_FEE");
         require(rent.owner != address(0), "NOT_RENTABLE");
@@ -73,16 +75,17 @@ contract Rentable {
         require(success);
 
         if (address(_getWrapped[collection]) == address(0)) {
-            ERC721 nft = ERC721(collection);
             WrappedERC721 newWrapped = new WrappedERC721(collection, nft.name(), nft.symbol());
-
             _getWrapped[collection] = newWrapped;
+
+            nft.approve(address(newWrapped), id);
             newWrapped.wrap(msg.sender, id);
         } else {        
             WrappedERC721 wrapped = _getWrapped[collection];
-            wrapped.wrap(msg.sender, id);
-
             rent.rentee = msg.sender;
+
+            nft.approve(address(wrapped), id);
+            wrapped.wrap(msg.sender, id);
         }
     }
 
