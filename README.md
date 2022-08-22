@@ -1,2 +1,2 @@
-# rentable
+# RentManager
  
