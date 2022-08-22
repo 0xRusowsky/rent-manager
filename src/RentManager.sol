@@ -5,8 +5,8 @@ import "openzeppelin-contracts/token/ERC721/IERC721.sol";
 import "solmate/tokens/ERC721.sol";
 import "./DelegationManager.sol";
 
-/// @notice Modern, minimalist, and gas efficient ERC-721 implementation.
-/// @author 0xruswowsky (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
+/// @notice Implementation of a peer-to-peer NFT rent manager contract
+/// @author 0xruswowsky (https://github.com/0xRusowsky/rent-manager/blob/main/src/RentManager.sol)
 contract RentManager {
 
     /// ----- EVENTS --------------------------------------------------
@@ -16,7 +16,6 @@ contract RentManager {
     event RentStart(address indexed contract_, uint256 indexed tokenId, address indexed rentee, uint256 rentedWeeks);
     event RentExtend(address indexed contract_, uint256 indexed tokenId, address indexed rentee, uint256 rentedWeeks);
     event RentEnd(address indexed contract_, uint256 indexed tokenId);
-
 
     /// ----- RENT STORAGE --------------------------------------------
 
@@ -197,7 +196,7 @@ contract RentManager {
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
             require(success);
 
-        } else if (block.timestamp > 1 weeks * rent.payedFee / rent.weeklyFee) {
+        } else if (block.timestamp > rent.startTime + 1 weeks * rent.payedFee / rent.weeklyFee) {
             _endRent(rent.owner, contract_, tokenId, false);
 
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
