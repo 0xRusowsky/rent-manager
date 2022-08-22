@@ -94,7 +94,7 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     function endDateOf(address contract_, uint256 tokenId) public view returns(uint256) {
         RentData memory rent = _getRent[contract_][tokenId];
-        return rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks;
+        return rent.weeklyFee > 0 ? rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks : rent.deadline;
     }
     
 
@@ -135,7 +135,7 @@ contract RentManager {
         RentData memory rent = _getRent[contract_][tokenId];
 
         require(msg.value > 0, "NO_FEE");
-        require(msg.value % rent.weeklyFee == 0, "WRONG_FEE");
+        require(rent.weeklyFee == 0 || msg.value % rent.weeklyFee == 0, "WRONG_FEE");
         require(rent.owner != address(0), "NOT_RENTABLE");
         require(rent.rentee == address(0), "ALREADY_RENTED");
         require(rent.deadline > block.timestamp + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
@@ -171,8 +171,7 @@ contract RentManager {
 
         require(msg.value % rent.weeklyFee == 0, "WRONG_FEE");
         require(rent.rentee == msg.sender, "NOT_RENTEE");
-        require(rent.deadline > block.timestamp, "EXPIRED");
-        require(rent.deadline > 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
+        require(rent.deadline > rent.startTime + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
         
         uint256 payedFee = rent.payedFee + msg.value;
         _getRent[contract_][tokenId].payedFee = payedFee;
@@ -209,7 +208,7 @@ contract RentManager {
 
             _endRent(rent.owner, contract_, tokenId, true);
 
-            (uint256 payback, uint256 value) = paybackHelper(rent);
+            (uint256 payback, uint256 value) = _paybackHelper(rent);
             require(msg.value == value, "INVALID_PAYBACK");
 
             (bool success, ) = rent.rentee.call{value: payback}("");
@@ -221,9 +220,19 @@ contract RentManager {
 
     /// ----- HELPER FUNCTIONS ----------------------------------------
 
-    /// @notice Get the required paybacak to close a rent before closure
+    /// @notice Get the required payback to end a rent before closure
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function paybackHelper(address contract_, uint256 tokenId) public view returns (uint256, uint256) {
+        RentData memory rent = _getRent[contract_][tokenId];
+        (uint256 payback, uint256 value) = _paybackHelper(rent);
+        return (payback, value);
+
+    }
+
+    /// @notice Internal function to get the required payback to end a rent before closure
     /// @param rent Relevant rent data
-    function paybackHelper(RentData memory rent) public view returns (uint256, uint256) {
+    function _paybackHelper(RentData memory rent) public view returns (uint256, uint256) {
         uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
         uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
 
@@ -251,6 +260,10 @@ contract RentManager {
     function _endRent(address owner, address contract_, uint256 tokenId, bool isOver) internal {
         DelegationManager delegation = _getDelegation[contract_];
         delegation.withdraw(tokenId);
+
+        delete _getRent[contract_][tokenId].rentee;
+        delete _getRent[contract_][tokenId].startTime;
+        delete _getRent[contract_][tokenId].payedFee;
 
         if (isOver) _withdraw(owner, contract_, tokenId);
     }
