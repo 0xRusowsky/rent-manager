@@ -5,7 +5,11 @@ import "openzeppelin-contracts/token/ERC721/IERC721.sol";
 import "solmate/tokens/ERC721.sol";
 import "./DelegationManager.sol";
 
+/// @notice Modern, minimalist, and gas efficient ERC-721 implementation.
+/// @author 0xruswowsky (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC721.sol)
 contract RentManager {
+
+    /// ----- EVENTS --------------------------------------------------
 
     event Deposit(address indexed owner, address indexed contract_, uint256 tokenId, uint256 deadline, uint256 weeklyFee);
     event Withdraw(address indexed contract_, uint256 indexed tokenId);
@@ -13,9 +17,13 @@ contract RentManager {
     event RentExtend(address indexed contract_, uint256 indexed tokenId, address indexed rentee, uint256 rentedWeeks);
     event RentEnd(address indexed contract_, uint256 indexed tokenId);
 
-    // Keepers get 1% of the fees for closing a rent
+
+    /// ----- RENT STORAGE --------------------------------------------
+
+    /// @notice Keepers get 1% of the fees for closing a rent
     uint256 constant KEEPER_FEE = 1;
 
+    /// @notice Relevant rent terms and current status
     struct RentData {
         // Rent terms
         address owner;
@@ -27,48 +35,76 @@ contract RentManager {
         uint256 payedFee;
     }
 
+    /// @notice Mapping between ERC721 contract and its DelegationManager contract
     mapping(address => DelegationManager) internal _getDelegation;
 
+    /// @notice Mapping between ERC721 contract and its RentData
     mapping(address => mapping(uint256 => RentData)) internal _getRent;
 
-    /// ----- RENT STORAGE --------------------------------------------------
-
-    function getDelegation(address contract_) public view returns(address) {
-        return address(_getDelegation[contract_]);
-    }
-
-    function isRented(address contract_, uint256 tokenId) public view returns(bool) {
-        return _getRent[contract_][tokenId].rentee != address(0) ? true : false;
-    }
-
-    function deadlineOf(address contract_, uint256 tokenId) public view returns(uint256) {
-        return _getRent[contract_][tokenId].deadline;
-    }
-
-    function weeklyFeeOf(address contract_, uint256 tokenId) public view returns(uint256) {
-        return _getRent[contract_][tokenId].weeklyFee;
-    }
-
+    /// @notice Return the depositor of an item, which is considered to be its owner
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function ownerOf(address contract_, uint256 tokenId) public view returns(address) {
         return _getRent[contract_][tokenId].owner;
     }
 
+    /// @notice Return the weekly fees to rent an item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function weeklyFeeOf(address contract_, uint256 tokenId) public view returns(uint256) {
+        return _getRent[contract_][tokenId].weeklyFee;
+    }
+
+    /// @notice Return the rent deadline from a deposited item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function deadlineOf(address contract_, uint256 tokenId) public view returns(uint256) {
+        return _getRent[contract_][tokenId].deadline;
+    }
+
+    /// @notice Return the DelegationManager contract address from a given contract
+    /// @param contract_ ERC721 contract address
+    function getDelegation(address contract_) public view returns(address) {
+        return address(_getDelegation[contract_]);
+    }
+
+    /// @notice Return whether a token from a given item is rented (true) or not (false)
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function isRented(address contract_, uint256 tokenId) public view returns(bool) {
+        return _getRent[contract_][tokenId].rentee != address(0) ? true : false;
+    }
+
+    /// @notice Return the rentee of an item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function renteeOf(address contract_, uint256 tokenId) public view returns(address) {
         return block.timestamp < deadlineOf(contract_, tokenId) ? _getRent[contract_][tokenId].rentee : address(0);
     }
 
+    /// @notice Return the total amount of fees payed to rent an item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function payedFeesOf(address contract_, uint256 tokenId) public view returns(uint256) {
         return _getRent[contract_][tokenId].payedFee;
     }
 
+    /// @notice Return the expected ending date of a rent
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function endDateOf(address contract_, uint256 tokenId) public view returns(uint256) {
         RentData memory rent = _getRent[contract_][tokenId];
         return rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks;
     }
     
 
-    /// ----- RENT LOGIC --------------------------------------------------
+    /// ----- DEPOSIT/WITHDRAW LOGIC ----------------------------------
 
+    /// @notice Give ownership of an item to the RentManager
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
+    /// @param weeklyFee Required weekly fee to rent the item
     function deposit(address contract_, uint256 tokenId, uint256 deadline, uint256 weeklyFee) external {
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(msg.sender, address(this), tokenId);
@@ -77,17 +113,23 @@ contract RentManager {
         emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee);
     }
 
+    /// @notice Give back ownership of an item to its owner. Only usable if the item is not rented.
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function withdraw(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
         require(rent.owner == msg.sender, "NOT_OWNER");
         require(rent.rentee == address(0), "IS_RENTED");
 
-        delete _getRent[contract_][tokenId];
-        
-        IERC721 nft = IERC721(contract_);
-        nft.transferFrom(address(this), rent.owner, tokenId);
+        _withdraw(rent.owner, contract_, tokenId);
     }
 
+    /// ----- RENT LOGIC ----------------------------------------------
+
+    /// @notice Start a new rent for an item in custody of the RentManager
+    /// @dev Gives ownership of the asset to the DelegationManager
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function startRent(address contract_, uint256 tokenId) external payable {
         ERC721 nft = ERC721(contract_);
         RentData memory rent = _getRent[contract_][tokenId];
@@ -96,8 +138,7 @@ contract RentManager {
         require(msg.value % rent.weeklyFee == 0, "WRONG_FEE");
         require(rent.owner != address(0), "NOT_RENTABLE");
         require(rent.rentee == address(0), "ALREADY_RENTED");
-        require(rent.deadline > block.timestamp, "EXPIRED");
-        require(rent.deadline > 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
+        require(rent.deadline > block.timestamp + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
         
         _getRent[contract_][tokenId].rentee = msg.sender;
         _getRent[contract_][tokenId].payedFee = msg.value;
@@ -122,6 +163,9 @@ contract RentManager {
         emit RentStart(contract_, tokenId, msg.sender, msg.value / rent.weeklyFee);
     }
 
+    /// @notice Extend the rent period by paying more fees
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function extendRent(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
 
@@ -139,12 +183,23 @@ contract RentManager {
         emit RentExtend(contract_, tokenId, msg.sender, payedFee / rent.weeklyFee);
     }
 
+    /// @notice End an ongoing rent
+    ///         Owners can redeem before endDate by paying the fees back to the renter
+    ///         Keepers can call this function to end finished rents and book a small profit
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
     function endRent(address contract_, uint256 tokenId) public payable {
         RentData memory rent = _getRent[contract_][tokenId];
         require(rent.rentee != address(0));
 
-        if (block.timestamp > rent.deadline || block.timestamp > 1 weeks * rent.payedFee / rent.weeklyFee) {
-            _endRent(rent.owner, contract_, tokenId);
+        if (block.timestamp > rent.deadline) {
+            _endRent(rent.owner, contract_, tokenId, true);
+
+            (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
+            require(success);
+
+        } else if (block.timestamp > 1 weeks * rent.payedFee / rent.weeklyFee) {
+            _endRent(rent.owner, contract_, tokenId, false);
 
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
             require(success);
@@ -152,7 +207,7 @@ contract RentManager {
         } else {
             require(rent.owner == msg.sender, "NOT_OWNER");
 
-            _endRent(rent.owner, contract_, tokenId);
+            _endRent(rent.owner, contract_, tokenId, true);
 
             (uint256 payback, uint256 value) = paybackHelper(rent);
             require(msg.value == value, "INVALID_PAYBACK");
@@ -164,6 +219,10 @@ contract RentManager {
         emit RentEnd(contract_, tokenId);
     }
 
+    /// ----- HELPER FUNCTIONS ----------------------------------------
+
+    /// @notice Get the required paybacak to close a rent before closure
+    /// @param rent Relevant rent data
     function paybackHelper(RentData memory rent) public view returns (uint256, uint256) {
         uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
         uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
@@ -171,13 +230,28 @@ contract RentManager {
         return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
     }
 
-    function _endRent(address owner, address contract_, uint256 tokenId) internal {
+    /// ----- INTERNAL RENT LOGIC -------------------------------------
+
+    /// @notice Give ownership of an item back to its owner
+    /// @param owner Original owner of the item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function _withdraw(address owner, address contract_, uint256 tokenId) internal {
+        delete _getRent[contract_][tokenId];
+
+        IERC721 nft = IERC721(contract_);
+        nft.transferFrom(address(this), owner, tokenId);
+    }
+
+    /// @notice Reclaim ownership of an item by transfering it away from the DelegationManager
+    /// @param owner Original owner of the item
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    /// @param isOver Whether the item is sent back to its owner (true) or not (false)
+    function _endRent(address owner, address contract_, uint256 tokenId, bool isOver) internal {
         DelegationManager delegation = _getDelegation[contract_];
         delegation.withdraw(tokenId);
 
-        delete _getRent[contract_][tokenId];
-        
-        IERC721 nft = IERC721(contract_);
-        nft.transferFrom(address(this), owner, tokenId);
+        if (isOver) _withdraw(owner, contract_, tokenId);
     }
 }
