@@ -13,7 +13,7 @@ contract ContractTest is Test {
     address keeper;
 
     function setUp() public {
-        nft = new MockERC721("Non-Fungible Token", "NFT");
+        nft = new MockERC721("Non-Fungible Token A", "NFTA");
         rent = new RentManager();
 
         owner = vm.addr(1);
@@ -25,7 +25,7 @@ contract ContractTest is Test {
         keeper = vm.addr(3);
         vm.label(keeper, "Keeper");
         
-        nft.mint(owner, 1);        
+        nft.mint(owner, 1);
         nft.mint(owner, 2);
     }
 
@@ -73,6 +73,49 @@ contract ContractTest is Test {
         assertTrue(owner.balance == 100.099 ether);
         assertTrue(rentee.balance == 99.9 ether);
         vm.stopPrank();
+    }
+
+    function testStartRentWIthTwoDifferentNFTs() public {
+        vm.startPrank(owner);
+        nft.approve(address(rent), 1);
+        nft.approve(address(rent), 2);
+        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);
+        rent.deposit(address(nft), 2, 123 weeks, 0.1 ether);
+        vm.stopPrank();
+
+        //Start Rent tokenId = 1
+        vm.startPrank(rentee);
+        rent.startRent{value: 0.1 ether}(address(nft), 1);
+        address deleg1 = rent.getDelegation(address(nft));
+
+        assertTrue(nft.ownerOf(1) == deleg1);
+        assertTrue(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0.1 ether);
+        assertTrue(rent.renteeOf(address(nft), 1) == rentee);
+        assertTrue(rent.endDateOf(address(nft), 1) == 1 weeks + 1);
+        assertTrue(rent.payedFeesOf(address(nft), 1) == 0.1 ether);
+        assertTrue(owner.balance == 100.099 ether);
+        assertTrue(rentee.balance == 99.9 ether);
+        
+        //Start Rent tokenId = 2
+        rent.startRent{value: 0.1 ether}(address(nft), 2);
+        address deleg2 = rent.getDelegation(address(nft));
+
+        assertTrue(nft.ownerOf(2) == deleg2);
+        assertTrue(rent.isRented(address(nft), 2));
+        assertTrue(rent.ownerOf(address(nft), 2) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 2) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 2) == 0.1 ether);
+        assertTrue(rent.renteeOf(address(nft), 2) == rentee);
+        assertTrue(rent.endDateOf(address(nft), 2) == 1 weeks + 1);
+        assertTrue(rent.payedFeesOf(address(nft), 2) == 0.1 ether);
+        assertTrue(owner.balance == 100.198 ether);
+        assertTrue(rentee.balance == 99.8 ether);
+        vm.stopPrank();
+
+        assertTrue(address(deleg1) == address(deleg2));
     }
 
         function testStartRentRequirements() public {
@@ -213,7 +256,7 @@ contract ContractTest is Test {
         assertTrue(rentee.balance == 99.8 ether);
 
         //Elapse 2 weeks
-        vm.warp(1 + 2 weeks);
+        vm.warp(2 + 2 weeks);
 
         //End Rent
         vm.prank(keeper);
