@@ -93,13 +93,12 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     function endDateOf(address contract_, uint256 tokenId) public view returns(uint256) {
         RentData memory rent = _getRent[contract_][tokenId];
-        return rent.weeklyFee > 0 ? rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks : rent.deadline;
+        return rent.weeklyFee == 0 ? rent.deadline : rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks;
     }
-    
 
     /// ----- DEPOSIT/WITHDRAW LOGIC ----------------------------------
 
-    /// @notice Give ownership of an item to the RentManager
+    /// @notice Give ownership of an item to the RentManager so that it can be rented by anyone
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
@@ -112,7 +111,24 @@ contract RentManager {
         emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee);
     }
 
-    /// @notice Give back ownership of an item to its owner. Only usable if the item is not rented.
+    /// @notice Delegate an item by starting a free rent
+    ///         Gives ownership of the item to the RentManager and the DelegationManager
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item 
+    /// @param to The address to which the item is delegated
+    /// @param deadline Max timestamp before the owner wants to get back ownership of the item
+    function delegate(address contract_, uint256 tokenId, address to, uint256 deadline) external {
+        IERC721 nft = IERC721(contract_);
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, address(0), 0, 0);
+
+        _startRent(contract_, tokenId, to, 0);
+
+        emit RentStart(contract_, tokenId, to, 0);
+    }
+
+    /// @notice Give back ownership of an item to its owner
+    ///         Only usable if the item is not rented
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function withdraw(address contract_, uint256 tokenId) external payable {
@@ -126,40 +142,21 @@ contract RentManager {
     /// ----- RENT LOGIC ----------------------------------------------
 
     /// @notice Start a new rent for an item in custody of the RentManager
-    /// @dev Gives ownership of the asset to the DelegationManager
+    ///         Gives ownership of the asset to the DelegationManager
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function startRent(address contract_, uint256 tokenId) external payable {
-        ERC721 nft = ERC721(contract_);
         RentData memory rent = _getRent[contract_][tokenId];
 
-        require(msg.value > 0, "NO_FEE");
+        require(msg.value >= rent.weeklyFee, "LOW_FEE");
         require(rent.weeklyFee == 0 || msg.value % rent.weeklyFee == 0, "WRONG_FEE");
         require(rent.owner != address(0), "NOT_RENTABLE");
         require(rent.rentee == address(0), "ALREADY_RENTED");
         require(rent.deadline > block.timestamp + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
         
-        _getRent[contract_][tokenId].rentee = msg.sender;
-        _getRent[contract_][tokenId].payedFee = msg.value;
-        _getRent[contract_][tokenId].startTime = block.timestamp;
+        _startRent(contract_, tokenId, msg.sender, msg.value);
 
-        (bool success, ) = rent.owner.call{value: msg.value * (100 - KEEPER_FEE) / 100}("");
-        require(success);
-
-        if (address(_getDelegation[contract_]) == address(0)) {
-            DelegationManager newDelegation = new DelegationManager(contract_, nft.name(), nft.symbol());
-            _getDelegation[contract_] = newDelegation;
-
-            nft.approve(address(newDelegation), tokenId);
-            newDelegation.deposit(rent.owner, msg.sender, tokenId);
-        } else {        
-            DelegationManager delegation = _getDelegation[contract_];
-
-            nft.approve(address(delegation), tokenId);
-            delegation.deposit(rent.owner, msg.sender, tokenId);
-        }
-
-        emit RentStart(contract_, tokenId, msg.sender, msg.value / rent.weeklyFee);
+        emit RentStart(contract_, tokenId, msg.sender, rent.weeklyFee == 0 ? rent.deadline : msg.value / rent.weeklyFee);
     }
 
     /// @notice Extend the rent period by paying more fees
@@ -196,7 +193,7 @@ contract RentManager {
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
             require(success);
 
-        } else if (block.timestamp > rent.startTime + 1 weeks * rent.payedFee / rent.weeklyFee) {
+        } else if (rent.weeklyFee > 0 && block.timestamp > rent.startTime + 1 weeks * rent.payedFee / rent.weeklyFee) {
             _endRent(rent.owner, contract_, tokenId, false);
 
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
@@ -249,6 +246,37 @@ contract RentManager {
 
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(address(this), owner, tokenId);
+    }
+
+    /// @notice Start a new rent for an item in custody of the RentManager
+    ///         Gives ownership of the asset to the DelegationManager
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    /// @param rentee The address to which the item is rented
+    /// @param payedFee The fee payed by the rentee
+    function _startRent(address contract_, uint256 tokenId, address rentee, uint256 payedFee) internal {
+        ERC721 nft = ERC721(contract_);
+        RentData memory rent = _getRent[contract_][tokenId];
+
+        _getRent[contract_][tokenId].rentee = rentee;
+        _getRent[contract_][tokenId].payedFee = payedFee;
+        _getRent[contract_][tokenId].startTime = block.timestamp;
+
+        (bool success, ) = rent.owner.call{value: msg.value * (100 - KEEPER_FEE) / 100}("");
+        require(success);
+
+        if (address(_getDelegation[contract_]) == address(0)) {
+            DelegationManager newDelegation = new DelegationManager(contract_, nft.name(), nft.symbol());
+            _getDelegation[contract_] = newDelegation;
+
+            nft.approve(address(newDelegation), tokenId);
+            newDelegation.deposit(rent.owner, msg.sender, tokenId);
+        } else {        
+            DelegationManager delegation = _getDelegation[contract_];
+
+            nft.approve(address(delegation), tokenId);
+            delegation.deposit(rent.owner, msg.sender, tokenId);
+        }
     }
 
     /// @notice Reclaim ownership of an item by transfering it away from the DelegationManager

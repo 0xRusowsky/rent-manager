@@ -51,6 +51,28 @@ contract ContractTest is Test {
         vm.stopPrank();
     }
 
+    function testDelegate() public {
+        vm.startPrank(owner);
+        nft.approve(address(rent), 1);
+        rent.delegate(address(nft), 1, rentee, 123 weeks);        
+        vm.stopPrank();
+
+        //Start Rent
+        address deleg = rent.getDelegation(address(nft));
+
+        assertTrue(nft.ownerOf(1) == deleg);
+        assertTrue(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0 ether);
+        assertTrue(rent.renteeOf(address(nft), 1) == rentee);
+        assertTrue(rent.endDateOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.payedFeesOf(address(nft), 1) == 0 ether);
+        assertTrue(owner.balance == 100 ether);
+        assertTrue(rentee.balance == 100 ether);
+        vm.stopPrank();
+    }
+
     function testStartRent() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
@@ -126,7 +148,7 @@ contract ContractTest is Test {
 
         //Start Rent
         vm.startPrank(rentee);
-        vm.expectRevert("NO_FEE");
+        vm.expectRevert("LOW_FEE");
         rent.startRent(address(nft), 1);
 
         vm.expectRevert("WRONG_FEE");
