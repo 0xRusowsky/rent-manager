@@ -140,7 +140,7 @@ contract ContractTest is Test {
         assertTrue(address(deleg1) == address(deleg2));
     }
 
-        function testStartRentRequirements() public {
+    function testStartRentRequirements() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
         rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
@@ -162,6 +162,51 @@ contract ContractTest is Test {
 
         rent.startRent{value: 0.1 ether}(address(nft), 1);
         vm.expectRevert(RentManager.RentedItem.selector);
+        rent.startRent{value: 0.1 ether}(address(nft), 1);
+        vm.stopPrank();
+    }
+
+    function testStartRentOTC() public {
+        vm.startPrank(owner);
+        nft.approve(address(rent), 1);
+        rent.depositOTC(address(nft), 1, rentee, 123 weeks, 0.1 ether);
+
+        assertTrue(nft.ownerOf(1) == address(rent));
+        assertFalse(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0.1 ether);
+        assertTrue(rent.renteeOf(address(nft), 1) == address(0));      
+        vm.stopPrank();
+
+        //Start Rent
+        vm.startPrank(rentee);
+        rent.startRent{value: 0.1 ether}(address(nft), 1);
+        address deleg = rent.getDelegation(address(nft));
+
+        assertTrue(nft.ownerOf(1) == deleg);
+        assertTrue(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0.1 ether);
+        assertTrue(rent.renteeOf(address(nft), 1) == rentee);
+        assertTrue(rent.endDateOf(address(nft), 1) == 1 weeks + 1);
+        assertTrue(rent.payedFeesOf(address(nft), 1) == 0.1 ether);
+        assertTrue(owner.balance == 100.099 ether);
+        assertTrue(rentee.balance == 99.9 ether);
+        vm.stopPrank();
+    }
+
+    function testStartRentOTCRequirements() public {
+        vm.startPrank(owner);
+        nft.approve(address(rent), 1);
+        rent.depositOTC(address(nft), 1, rentee, 123 weeks, 0.1 ether);
+        vm.stopPrank();
+
+        //Start Rent
+        vm.startPrank(keeper);
+        vm.deal(keeper, 0.1 ether);
+        vm.expectRevert(abi.encodeWithSelector(RentManager.OnlyRentableOTC.selector, rentee));
         rent.startRent{value: 0.1 ether}(address(nft), 1);
         vm.stopPrank();
     }

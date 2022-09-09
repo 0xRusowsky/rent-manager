@@ -13,7 +13,7 @@ contract RentManager {
 
     error NotOwner();
     error NotRentable();
-    error OnlyRentableOTC();
+    error OnlyRentableOTC(address rentableBy);
     error OverDeadline();    
     error RentedItem();
     error WrongPaymentAmount();
@@ -88,7 +88,8 @@ contract RentManager {
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function renteeOf(address contract_, uint256 tokenId) public view returns(address) {
-        return _getRent[contract_][tokenId].rentee;
+        RentData memory rent = _getRent[contract_][tokenId];
+        return rent.startTime != 0 ? rent.rentee : address(0);
     }
 
     /// @notice Return the total amount of fees payed to rent an item
@@ -142,6 +143,20 @@ contract RentManager {
         emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee);
     }
 
+    /// @notice Give ownership of an item to the RentManager so that it can only be rented by a specified address
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    /// @param rentee Address allowed to rent the deposited item
+    /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
+    /// @param weeklyFee Required weekly fee to rent the item
+    function depositOTC(address contract_, uint256 tokenId, address rentee, uint256 deadline, uint256 weeklyFee) external {
+        IERC721 nft = IERC721(contract_);
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, weeklyFee, rentee, 0, 0);
+
+        emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee);
+    }
+
     /// @notice Give back ownership of an item to its owner
     ///         Only usable if the item is not rented
     /// @param contract_ ERC721 contract address
@@ -166,7 +181,7 @@ contract RentManager {
 
         if (rent.owner == address(0)) revert NotRentable();
         if (rent.startTime != 0) revert RentedItem();
-        if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC();
+        if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC(rent.rentee);
         if (msg.value < rent.weeklyFee || msg.value % rent.weeklyFee != 0) revert WrongPaymentAmount();
         if (msg.value > _maxPayableFee(rent)) revert OverDeadline();
         
