@@ -9,6 +9,15 @@ import "./DelegationManager.sol";
 /// @author 0xruswowsky (https://github.com/0xRusowsky/rent-manager/blob/main/src/RentManager.sol)
 contract RentManager {
 
+    /// ----- ERRORS --------------------------------------------------
+
+    error NotOwner();
+    error NotRentable();
+    error OnlyRentableOTC();
+    error OverDeadline();    
+    error RentedItem();
+    error WrongPaymentAmount();
+
     /// ----- EVENTS --------------------------------------------------
 
     event Deposit(address indexed owner, address indexed contract_, uint256 tokenId, uint256 deadline, uint256 weeklyFee);
@@ -16,6 +25,7 @@ contract RentManager {
     event RentStart(address indexed contract_, uint256 indexed tokenId, address indexed rentee, uint256 rentedWeeks);
     event RentExtend(address indexed contract_, uint256 indexed tokenId, address indexed rentee, uint256 rentedWeeks);
     event RentEnd(address indexed contract_, uint256 indexed tokenId);
+
 
     /// ----- RENT STORAGE --------------------------------------------
 
@@ -71,14 +81,14 @@ contract RentManager {
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function isRented(address contract_, uint256 tokenId) public view returns(bool) {
-        return _getRent[contract_][tokenId].rentee != address(0) ? true : false;
+        return _getRent[contract_][tokenId].startTime != 0 ? true : false;
     }
 
     /// @notice Return the rentee of an item
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function renteeOf(address contract_, uint256 tokenId) public view returns(address) {
-        return block.timestamp < deadlineOf(contract_, tokenId) ? _getRent[contract_][tokenId].rentee : address(0);
+        return _getRent[contract_][tokenId].rentee;
     }
 
     /// @notice Return the total amount of fees payed to rent an item
@@ -96,6 +106,27 @@ contract RentManager {
         return rent.weeklyFee == 0 ? rent.deadline : rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks;
     }
 
+
+    /// ----- DELEGATION LOGIC ----------------------------------------
+
+    /// @notice Delegate an item by starting a free rent to the desired delegatee
+    ///         Gives ownership of the item to the RentManager
+    ///         The RentManager gives ownership of the item to the DelegationManager
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item 
+    /// @param to The address to which the item is delegated
+    /// @param deadline Max timestamp before the owner wants to get back ownership of the item
+    function delegate(address contract_, uint256 tokenId, address to, uint256 deadline) external {
+        IERC721 nft = IERC721(contract_);
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, address(0), 0, 0);
+
+        _startRent(contract_, tokenId, msg.sender, to, 0);
+
+        emit RentStart(contract_, tokenId, to, 0);
+    }
+
+
     /// ----- DEPOSIT/WITHDRAW LOGIC ----------------------------------
 
     /// @notice Give ownership of an item to the RentManager so that it can be rented by anyone
@@ -111,33 +142,18 @@ contract RentManager {
         emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee);
     }
 
-    /// @notice Delegate an item by starting a free rent
-    ///         Gives ownership of the item to the RentManager and the DelegationManager
-    /// @param contract_ ERC721 contract address
-    /// @param tokenId The token id for the given item 
-    /// @param to The address to which the item is delegated
-    /// @param deadline Max timestamp before the owner wants to get back ownership of the item
-    function delegate(address contract_, uint256 tokenId, address to, uint256 deadline) external {
-        IERC721 nft = IERC721(contract_);
-        nft.transferFrom(msg.sender, address(this), tokenId);
-        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, address(0), 0, 0);
-
-        _startRent(contract_, tokenId, to, 0);
-
-        emit RentStart(contract_, tokenId, to, 0);
-    }
-
     /// @notice Give back ownership of an item to its owner
     ///         Only usable if the item is not rented
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
     function withdraw(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
-        require(rent.owner == msg.sender, "NOT_OWNER");
-        require(rent.rentee == address(0), "IS_RENTED");
+        if (rent.owner != msg.sender) revert NotOwner();
+        if (rent.startTime != 0) revert RentedItem();
 
         _withdraw(rent.owner, contract_, tokenId);
     }
+
 
     /// ----- RENT LOGIC ----------------------------------------------
 
@@ -148,13 +164,13 @@ contract RentManager {
     function startRent(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
 
-        require(msg.value >= rent.weeklyFee, "LOW_FEE");
-        require(rent.weeklyFee == 0 || msg.value % rent.weeklyFee == 0, "WRONG_FEE");
-        require(rent.owner != address(0), "NOT_RENTABLE");
-        require(rent.rentee == address(0), "ALREADY_RENTED");
-        require(rent.deadline > block.timestamp + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
+        if (rent.owner == address(0)) revert NotRentable();
+        if (rent.startTime != 0) revert RentedItem();
+        if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC();
+        if (msg.value < rent.weeklyFee || msg.value % rent.weeklyFee != 0) revert WrongPaymentAmount();
+        if (msg.value > _maxPayableFee(rent)) revert OverDeadline();
         
-        _startRent(contract_, tokenId, msg.sender, msg.value);
+        _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value);
 
         emit RentStart(contract_, tokenId, msg.sender, rent.weeklyFee == 0 ? rent.deadline : msg.value / rent.weeklyFee);
     }
@@ -165,9 +181,8 @@ contract RentManager {
     function extendRent(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
 
-        require(msg.value % rent.weeklyFee == 0, "WRONG_FEE");
-        require(rent.rentee == msg.sender, "NOT_RENTEE");
-        require(rent.deadline > rent.startTime + 1 weeks * (rent.payedFee + msg.value) / rent.weeklyFee, "OVER_DEADLINE");
+        if (msg.value % rent.weeklyFee != 0) revert WrongPaymentAmount();
+        if (msg.value > _maxPayableFee(rent)) revert OverDeadline();
         
         uint256 payedFee = rent.payedFee + msg.value;
         _getRent[contract_][tokenId].payedFee = payedFee;
@@ -185,27 +200,24 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     function endRent(address contract_, uint256 tokenId) public payable {
         RentData memory rent = _getRent[contract_][tokenId];
-        require(rent.rentee != address(0));
 
-        if (block.timestamp > rent.deadline) {
-            _endRent(rent.owner, contract_, tokenId, true);
-
-            (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
-            require(success);
-
-        } else if (rent.weeklyFee > 0 && block.timestamp > rent.startTime + 1 weeks * rent.payedFee / rent.weeklyFee) {
-            _endRent(rent.owner, contract_, tokenId, false);
+        if (rent.weeklyFee > 0 && block.timestamp > rent.startTime + 1 weeks * rent.payedFee / rent.weeklyFee) {
+            if (block.timestamp < rent.deadline) {
+                _endRent(rent.owner, contract_, tokenId, false);
+            } else {
+                _endRent(rent.owner, contract_, tokenId, true);
+            }
 
             (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
             require(success);
 
         } else {
-            require(rent.owner == msg.sender, "NOT_OWNER");
+            if (rent.owner != msg.sender) revert NotOwner();
 
             _endRent(rent.owner, contract_, tokenId, true);
 
             (uint256 payback, uint256 value) = _paybackHelper(rent);
-            require(msg.value == value, "INVALID_PAYBACK");
+            if (msg.value != value) revert WrongPaymentAmount();
 
             (bool success, ) = rent.rentee.call{value: payback}("");
             require(success); 
@@ -214,26 +226,6 @@ contract RentManager {
         emit RentEnd(contract_, tokenId);
     }
 
-    /// ----- HELPER FUNCTIONS ----------------------------------------
-
-    /// @notice Get the required payback to end a rent before closure
-    /// @param contract_ ERC721 contract address
-    /// @param tokenId The token id for the given item
-    function paybackHelper(address contract_, uint256 tokenId) public view returns (uint256, uint256) {
-        RentData memory rent = _getRent[contract_][tokenId];
-        (uint256 payback, uint256 value) = _paybackHelper(rent);
-        return (payback, value);
-
-    }
-
-    /// @notice Internal function to get the required payback to end a rent before closure
-    /// @param rent Relevant rent data
-    function _paybackHelper(RentData memory rent) public view returns (uint256, uint256) {
-        uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
-        uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
-
-        return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
-    }
 
     /// ----- INTERNAL RENT LOGIC -------------------------------------
 
@@ -254,15 +246,14 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     /// @param rentee The address to which the item is rented
     /// @param payedFee The fee payed by the rentee
-    function _startRent(address contract_, uint256 tokenId, address rentee, uint256 payedFee) internal {
+    function _startRent(address contract_, uint256 tokenId, address owner, address rentee, uint256 payedFee) internal {
         ERC721 nft = ERC721(contract_);
-        RentData memory rent = _getRent[contract_][tokenId];
 
         _getRent[contract_][tokenId].rentee = rentee;
         _getRent[contract_][tokenId].payedFee = payedFee;
         _getRent[contract_][tokenId].startTime = block.timestamp;
 
-        (bool success, ) = rent.owner.call{value: msg.value * (100 - KEEPER_FEE) / 100}("");
+        (bool success, ) = owner.call{value: msg.value * (100 - KEEPER_FEE) / 100}("");
         require(success);
 
         if (address(_getDelegation[contract_]) == address(0)) {
@@ -270,12 +261,12 @@ contract RentManager {
             _getDelegation[contract_] = newDelegation;
 
             nft.approve(address(newDelegation), tokenId);
-            newDelegation.deposit(rent.owner, msg.sender, tokenId);
+            newDelegation.deposit(owner, msg.sender, tokenId);
         } else {        
             DelegationManager delegation = _getDelegation[contract_];
 
             nft.approve(address(delegation), tokenId);
-            delegation.deposit(rent.owner, msg.sender, tokenId);
+            delegation.deposit(owner, msg.sender, tokenId);
         }
     }
 
@@ -287,11 +278,51 @@ contract RentManager {
     function _endRent(address owner, address contract_, uint256 tokenId, bool isOver) internal {
         DelegationManager delegation = _getDelegation[contract_];
         delegation.withdraw(tokenId);
+        
+        if (isOver) {
+            _withdraw(owner, contract_, tokenId);
+        } else {
+            delete _getRent[contract_][tokenId].rentee;
+            delete _getRent[contract_][tokenId].startTime;
+            delete _getRent[contract_][tokenId].payedFee;
+        }
+    }
 
-        delete _getRent[contract_][tokenId].rentee;
-        delete _getRent[contract_][tokenId].startTime;
-        delete _getRent[contract_][tokenId].payedFee;
+    
+    /// ----- HELPER FUNCTIONS ----------------------------------------
 
-        if (isOver) _withdraw(owner, contract_, tokenId);
+    /// @notice Get the maximum payable fee according to the deadline
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function maxPayableFee(address contract_, uint256 tokenId) public view returns (uint256) {
+        RentData memory rent = _getRent[contract_][tokenId];
+        return _maxPayableFee(rent);
+    }
+
+    /// @notice Internal function to get the maximum payable fee according to the deadline
+    /// @param rent Relevant rent data
+    function _maxPayableFee(RentData memory rent) internal view returns (uint256) {
+        if (rent.startTime == 0) {
+            return (rent.weeklyFee / 1 weeks * (rent.deadline - block.timestamp));
+        } else {
+            return (rent.weeklyFee / 1 weeks * (rent.deadline - rent.startTime)) - rent.payedFee;
+        }
+    }
+
+    /// @notice Get the required payback to end a rent before closure
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function paybackHelper(address contract_, uint256 tokenId) public view returns (uint256, uint256) {
+        RentData memory rent = _getRent[contract_][tokenId];
+        return _paybackHelper(rent);
+    }
+
+    /// @notice Internal function to get the required payback to end a rent before closure
+    /// @param rent Relevant rent data
+    function _paybackHelper(RentData memory rent) internal view returns (uint256, uint256) {
+        uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
+        uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
+
+        return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
     }
 }
