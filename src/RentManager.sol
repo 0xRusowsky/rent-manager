@@ -32,16 +32,33 @@ contract RentManager {
     /// @notice Keepers get 1% of the fees for closing a rent
     uint256 constant KEEPER_FEE = 1;
 
+    enum AuctionType {None, Dutch, English}
+
     /// @notice Relevant rent terms and current status
     struct RentData {
         // Rent terms
         address owner;
         uint256 deadline;
         uint256 weeklyFee;
+        AuctionType auctionType;
         // Rent status
         address rentee;
         uint256 startTime;
         uint256 payedFee;
+    }
+
+    /// @notice Relevant english auction information
+    struct EnglishAuction {
+        uint256 maxBid;
+        address maxBidder;
+        uint256 deadline;
+    }
+
+    /// @notice Relevant dutch auction information
+    struct DutchAuction {
+        uint256 startTime;
+        uint256 startingPrice;
+        uint256 deadline;
     }
 
     /// @notice Mapping between ERC721 contract and its DelegationManager contract
@@ -49,6 +66,12 @@ contract RentManager {
 
     /// @notice Mapping between ERC721 contract and its RentData
     mapping(address => mapping(uint256 => RentData)) internal _getRent;
+
+    /// @notice Mapping between ERC721 contract and its EnglishAuction data
+    mapping(address => mapping(uint256 => EnglishAuction)) internal _getEnglishAuction;
+
+    /// @notice Mapping between ERC721 contract and its DutchAuction data
+    mapping(address => mapping(uint256 => DutchAuction)) internal _getDutchAuction;
 
     /// @notice Return the depositor of an item, which is considered to be its owner
     /// @param contract_ ERC721 contract address
@@ -107,6 +130,26 @@ contract RentManager {
         return rent.weeklyFee == 0 ? rent.deadline : rent.startTime + (rent.payedFee / rent.weeklyFee) * 1 weeks;
     }
 
+    /// @notice Return an item's auction system used to determine the rentee
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function auctionTypeOf(address contract_, uint256 tokenId) public view returns(AuctionType) {
+        return _getRent[contract_][tokenId].auctionType;
+    }
+
+    /// @notice Return an item's information related to english auctions
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function getEnglishAuction(address contract_, uint256 tokenId) public view returns(EnglishAuction memory) {
+        return _getEnglishAuction[contract_][tokenId];
+    }
+
+    /// @notice Return an item's information related to dutch auctions
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    function getDutchAuction(address contract_, uint256 tokenId) public view returns(DutchAuction memory) {
+        return _getDutchAuction[contract_][tokenId];
+    }
 
     /// ----- DELEGATION LOGIC ----------------------------------------
 
@@ -335,6 +378,30 @@ contract RentManager {
     /// @notice Internal function to get the required payback to end a rent before closure
     /// @param rent Relevant rent data
     function _paybackHelper(RentData memory rent) internal view returns (uint256, uint256) {
+        uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
+        uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
+
+        return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
+    }
+
+    
+    /// ----- AUCTION FUNCTIONS ----------------------------------------
+
+    function _getDutchAuctionPrice(RentData memory rent) internal view returns (uint256, uint256) {
+        uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
+        uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
+
+        return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
+    }
+
+    function _getEnglishAuctionPrice(RentData memory rent) internal view returns (uint256, uint256) {
+        uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
+        uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
+
+        return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
+    }
+
+    function _updateEnglishAuctionPrice(RentData memory rent) internal view returns (uint256, uint256) {
         uint256 elapsedWeeks = (block.timestamp - rent.startTime) / 1 weeks;
         uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
 
