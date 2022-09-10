@@ -11,14 +11,16 @@ contract RentManager {
 
     /// ----- ERRORS --------------------------------------------------
 
+    error NotAuctioned();
+    error NotEndable();
     error NotOwner();
     error NotRentable();
-    error NotAuctioned();
     error OngoingAuction();
     error OnlyRentableOTC(address rentableBy);
-    error OverDeadline();    
+    error OverDeadline();
     error RentedItem();
     error WrongPaymentAmount();
+
 
     /// ----- EVENTS --------------------------------------------------
 
@@ -158,6 +160,7 @@ contract RentManager {
         return _getEnglishAuction[contract_][tokenId];
     }
 
+
     /// ----- DELEGATION LOGIC ----------------------------------------
 
     /// @notice Delegate an item by starting a free rent to the desired delegatee
@@ -190,7 +193,7 @@ contract RentManager {
         nft.transferFrom(msg.sender, address(this), tokenId);
         _getRent[contract_][tokenId] = RentData(msg.sender, deadline, weeklyFee, AuctionType.None, address(0), 0, 0);
 
-        emit Deposit(msg.sender, contract_, tokenId, deadline, weeklyFee, AuctionType.None);
+        emit Deposit(msg.sender, contract_, tokenId, deadline);
     }
 
     /// @notice Give ownership of an item to the RentManager so that it can be rented by anyone
@@ -236,8 +239,16 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     function withdraw(address contract_, uint256 tokenId) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
+
         if (rent.owner != msg.sender) revert NotOwner();
         if (rent.startTime != 0) revert RentedItem();
+
+        if (rent.auctionType == AuctionType.English) {
+            EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
+
+            (bool success, ) = auction.maxBidder.call{value: auction.collateral}("");
+            require(success);
+        }
 
         _withdraw(rent.owner, contract_, tokenId);
     }
@@ -323,6 +334,8 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     function _withdraw(address owner, address contract_, uint256 tokenId) internal {
         delete _getRent[contract_][tokenId];
+        delete _getDutchAuction[contract_][tokenId];
+        delete _getEnglishAuction[contract_][tokenId];
 
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(address(this), owner, tokenId);
@@ -434,7 +447,7 @@ contract RentManager {
     
     /// ----- AUCTION LOGIC ----------------------------------------
 
-    function newBid(address contract_, uint256 tokenId, uint256 numWeeks) external payable returns (uint256, uint256) {
+    function newBid(address contract_, uint256 tokenId, uint256 numWeeks) external payable {
         RentData memory rent = _getRent[contract_][tokenId];
         uint256 weeklyFee = msg.value / numWeeks;
 
@@ -469,5 +482,19 @@ contract RentManager {
 
             }
         } else revert NotAuctioned();
+    }
+
+    function endAuction(address contract_, uint256 tokenId) public payable {
+        RentData memory rent = _getRent[contract_][tokenId];
+        EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
+
+        if (rent.startTime != 0) revert RentedItem();
+        if (rent.auctionType != AuctionType.English || block.timestamp < auction.deadline) revert NotEndable();
+
+        _getRent[contract_][tokenId].weeklyFee = auction.maxBid;
+        _startRent(contract_, tokenId, rent.owner, auction.maxBidder, auction.collateral, true);
+
+        (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
+        require(success);
     }
 }

@@ -32,7 +32,7 @@ contract ContractTest is Test {
     function testDepositAndWithdraw() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);
 
         assertTrue(nft.ownerOf(1) == address(rent));
         assertFalse(rent.isRented(address(nft), 1));
@@ -76,7 +76,7 @@ contract ContractTest is Test {
     function testStartRent() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         //Start Rent
@@ -101,8 +101,8 @@ contract ContractTest is Test {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
         nft.approve(address(rent), 2);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);
-        rent.deposit(address(nft), 2, 123 weeks, 0.1 ether);
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);
+        rent.depositWithoutAuction(address(nft), 2, 123 weeks, 0.1 ether);
         vm.stopPrank();
 
         //Start Rent tokenId = 1
@@ -143,7 +143,7 @@ contract ContractTest is Test {
     function testStartRentRequirements() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         //Start Rent
@@ -214,7 +214,7 @@ contract ContractTest is Test {
     function testExtendRent() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         vm.startPrank(rentee);
@@ -240,7 +240,7 @@ contract ContractTest is Test {
         function testExtendRentRequirements() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         vm.startPrank(rentee);
@@ -264,7 +264,7 @@ contract ContractTest is Test {
     function testEndRentEarly() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         vm.prank(rentee);
@@ -305,7 +305,7 @@ contract ContractTest is Test {
     function testEndRentKeeper() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         vm.prank(rentee);
@@ -346,7 +346,7 @@ contract ContractTest is Test {
     function testEndRentKeeperAfterDeadline() public {
         vm.startPrank(owner);
         nft.approve(address(rent), 1);
-        rent.deposit(address(nft), 1, 123 weeks, 0.1 ether);        
+        rent.depositWithoutAuction(address(nft), 1, 123 weeks, 0.1 ether);        
         vm.stopPrank();
 
         vm.prank(rentee);
