@@ -188,10 +188,24 @@ contract RentManager {
     /// @param tokenId The token id for the given item
     /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
     /// @param weeklyFee Required weekly fee to rent the item
-    function depositWithoutAuction(address contract_, uint256 tokenId, uint256 deadline, uint256 weeklyFee) external {
+    function deposit(address contract_, uint256 tokenId, uint256 deadline, uint256 weeklyFee) external {
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(msg.sender, address(this), tokenId);
         _getRent[contract_][tokenId] = RentData(msg.sender, deadline, weeklyFee, AuctionType.None, address(0), 0, 0);
+
+        emit Deposit(msg.sender, contract_, tokenId, deadline);
+    }
+
+    /// @notice Give ownership of an item to the RentManager so that it can only be rented by a specified address
+    /// @param contract_ ERC721 contract address
+    /// @param tokenId The token id for the given item
+    /// @param rentee Address allowed to rent the deposited item
+    /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
+    /// @param weeklyFee Required weekly fee to rent the item
+    function depositOTC(address contract_, uint256 tokenId, address rentee, uint256 deadline, uint256 weeklyFee) external {
+        IERC721 nft = IERC721(contract_);
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, weeklyFee, AuctionType.None, rentee, 0, 0);
 
         emit Deposit(msg.sender, contract_, tokenId, deadline);
     }
@@ -213,24 +227,35 @@ contract RentManager {
         ) external {
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, AuctionType.Dutch, address(0), 0, 0);
-        _getDutchAuction[contract_][tokenId] = DutchAuction(auctionDeadline, minPrice, block.timestamp, startPrice);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, AuctionType.None, address(0), 0, 0);
+        _startDutchAuction(contract_, tokenId, auctionDeadline, minPrice, startPrice);
 
         emit Deposit(msg.sender, contract_, tokenId, deadline);
+        emit AuctionStart(contract_, tokenId, AuctionType.Dutch, auctionDeadline);
     }
 
-    /// @notice Give ownership of an item to the RentManager so that it can only be rented by a specified address
+    /// @notice Give ownership of an item to the RentManager so that it can be rented by anyone
     /// @param contract_ ERC721 contract address
     /// @param tokenId The token id for the given item
-    /// @param rentee Address allowed to rent the deposited item
     /// @param deadline Max timestamp before the owner wants to get back ownership of the item 
-    /// @param weeklyFee Required weekly fee to rent the item
-    function depositOTC(address contract_, uint256 tokenId, address rentee, uint256 deadline, uint256 weeklyFee) external {
+    /// @param auctionDeadline Max timestamp to submit a bid above minPrice
+    /// @param minPrice Minimum price at which the item can be rented
+    /// @param autoAcceptPrice Bid price that automatically wins the auction
+    function depositWithEnglishAuction(
+        address contract_,
+        uint256 tokenId,
+        uint256 deadline,
+        uint256 auctionDeadline,
+        uint256 minPrice,
+        uint256 autoAcceptPrice
+        ) external {
         IERC721 nft = IERC721(contract_);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, weeklyFee, AuctionType.None, rentee, 0, 0);
+        _getRent[contract_][tokenId] = RentData(msg.sender, deadline, 0, AuctionType.None, address(0), 0, 0);
+        _startEnglishAuction(contract_, tokenId, auctionDeadline, minPrice, autoAcceptPrice);
 
         emit Deposit(msg.sender, contract_, tokenId, deadline);
+        emit AuctionStart(contract_, tokenId, AuctionType.English, auctionDeadline);
     }
 
     /// @notice Give back ownership of an item to its owner
@@ -254,6 +279,97 @@ contract RentManager {
     }
 
 
+    /// ----- AUCTION LOGIC ----------------------------------------
+
+    function startDutchAuction(address contract_, uint256 tokenId, uint256 deadline, uint256 minPrice, uint256 startPrice) public {
+        RentData memory rent = _getRent[contract_][tokenId];
+
+        if (msg.sender != rent.owner) revert NotOwner();
+        if (rent.startTime != 0) revert RentedItem();
+
+        delete _getRent[contract_][tokenId].weeklyFee;
+        _startDutchAuction(contract_, tokenId, deadline, minPrice, startPrice);
+
+        emit AuctionStart(contract_, tokenId, AuctionType.Dutch, deadline);
+    }
+
+    function startEnglishAuction(address contract_, uint256 tokenId, uint256 deadline, uint256 minPrice, uint256 autoAcceptPrice) public {
+        RentData memory rent = _getRent[contract_][tokenId];
+
+        if (msg.sender != rent.owner) revert NotOwner();
+        if (rent.startTime != 0) revert RentedItem();
+
+        delete _getRent[contract_][tokenId].weeklyFee;
+        _startEnglishAuction(contract_, tokenId, deadline, minPrice, autoAcceptPrice);
+
+        emit AuctionStart(contract_, tokenId, AuctionType.English, deadline);
+    }
+
+    function newBid(address contract_, uint256 tokenId, uint256 numWeeks) external payable {
+        RentData memory rent = _getRent[contract_][tokenId];
+        uint256 weeklyFee = msg.value / numWeeks;
+
+        if (rent.owner == address(0)) revert NotRentable();
+        if (rent.startTime != 0) revert RentedItem();
+        if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC(rent.rentee);
+
+        if (rent.auctionType == AuctionType.Dutch) {
+            DutchAuction memory auction = _getDutchAuction[contract_][tokenId];
+
+            if (weeklyFee < auction.minPrice || weeklyFee == _getDutchAuctionPrice(auction)) revert WrongPaymentAmount();
+
+            _getRent[contract_][tokenId].weeklyFee = weeklyFee;
+            _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
+
+        } else if (rent.auctionType == AuctionType.English) {
+            EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
+
+            if (weeklyFee <= auction.maxBid) revert WrongPaymentAmount();
+
+            if (weeklyFee != auction.autoAcceptPrice) {
+                _getEnglishAuction[contract_][tokenId].maxBid = weeklyFee;
+                _getEnglishAuction[contract_][tokenId].maxBidder = msg.sender;
+                _getEnglishAuction[contract_][tokenId].collateral = msg.value;
+
+                (bool success, ) = auction.maxBidder.call{value: auction.collateral}("");
+                require(success);
+
+            } else {
+                _getRent[contract_][tokenId].weeklyFee = weeklyFee;
+                _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
+
+            }
+        } else revert NotAuctioned();
+    }
+
+    function endAuction(address contract_, uint256 tokenId) public payable {
+        RentData memory rent = _getRent[contract_][tokenId];
+        EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
+
+        if (rent.startTime != 0) revert RentedItem();
+        if (rent.auctionType != AuctionType.English || block.timestamp < auction.deadline) revert NotEndable();
+
+        _getRent[contract_][tokenId].weeklyFee = auction.maxBid;
+        _startRent(contract_, tokenId, rent.owner, auction.maxBidder, auction.collateral, true);
+
+        (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
+        require(success);
+    }
+    
+
+    /// ----- INTERNAL AUCTION LOGIC --------------------------------
+
+    function _startDutchAuction(address contract_, uint256 tokenId, uint256 deadline, uint256 minPrice, uint256 startPrice) internal {
+        _getRent[contract_][tokenId].auctionType = AuctionType.Dutch;
+        _getDutchAuction[contract_][tokenId] = DutchAuction(deadline, minPrice, block.timestamp, startPrice);
+    }
+
+    function _startEnglishAuction(address contract_, uint256 tokenId, uint256 deadline, uint256 minPrice, uint256 autoAcceptPrice) internal {
+        _getRent[contract_][tokenId].auctionType = AuctionType.English;
+        _getEnglishAuction[contract_][tokenId] = EnglishAuction(autoAcceptPrice, deadline, minPrice, address(0), 0);
+    }
+
+
     /// ----- RENT LOGIC ----------------------------------------------
 
     /// @notice Start a new rent for an item in custody of the RentManager
@@ -266,8 +382,30 @@ contract RentManager {
         if (rent.owner == address(0)) revert NotRentable();
         if (rent.startTime != 0) revert RentedItem();
         if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC(rent.rentee);
-        if (msg.value < rent.weeklyFee || msg.value % rent.weeklyFee != 0) revert WrongPaymentAmount();
-        if (msg.value > _maxPayableFee(rent)) revert OverDeadline();
+
+        if (rent.auctionType == AuctionType.None) {
+            if (msg.value < rent.weeklyFee || msg.value % rent.weeklyFee != 0) revert WrongPaymentAmount();
+            if (msg.value > _maxPayableFee(rent)) revert OverDeadline();
+
+        } else if (rent.auctionType == AuctionType.Dutch) {
+            DutchAuction memory auction = _getDutchAuction[contract_][tokenId];
+
+            if (block.timestamp < auction.deadline)  revert OngoingAuction();
+
+            _getRent[contract_][tokenId].weeklyFee = auction.minPrice;
+            if (msg.value == 0 || msg.value % auction.minPrice != 0) revert WrongPaymentAmount();
+            if (msg.value > auction.minPrice * (rent.deadline - block.timestamp) / 1 weeks) revert OverDeadline();
+
+        } else {
+            EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
+
+            if (block.timestamp < auction.deadline)  revert OngoingAuction();
+            if (auction.maxBidder != address(0)) revert RentedItem();
+
+            _getRent[contract_][tokenId].weeklyFee = auction.maxBid;
+            if (msg.value == 0 || msg.value % auction.maxBid != 0) revert WrongPaymentAmount();
+            if (msg.value > auction.maxBid * (rent.deadline - block.timestamp) / 1 weeks) revert OverDeadline();
+        }
         
         _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
 
@@ -391,6 +529,10 @@ contract RentManager {
             delete _getRent[contract_][tokenId].rentee;
             delete _getRent[contract_][tokenId].startTime;
             delete _getRent[contract_][tokenId].payedFee;
+            delete _getDutchAuction[contract_][tokenId];
+            delete _getEnglishAuction[contract_][tokenId];
+
+            _getRent[contract_][tokenId].auctionType = AuctionType.None;
         }
     }
 
@@ -409,9 +551,9 @@ contract RentManager {
     /// @param rent Relevant rent data
     function _maxPayableFee(RentData memory rent) internal view returns (uint256) {
         if (rent.startTime == 0) {
-            return (rent.weeklyFee / 1 weeks * (rent.deadline - block.timestamp));
+            return (rent.weeklyFee * (rent.deadline - block.timestamp) / 1 weeks);
         } else {
-            return (rent.weeklyFee / 1 weeks * (rent.deadline - rent.startTime)) - rent.payedFee;
+            return (rent.weeklyFee * (rent.deadline - rent.startTime) / 1 weeks) - rent.payedFee;
         }
     }
 
@@ -442,59 +584,5 @@ contract RentManager {
         uint256 payback = rent.payedFee - elapsedWeeks * rent.weeklyFee;
 
         return (payback, payback - rent.payedFee * KEEPER_FEE / 100);
-    }
-
-    
-    /// ----- AUCTION LOGIC ----------------------------------------
-
-    function newBid(address contract_, uint256 tokenId, uint256 numWeeks) external payable {
-        RentData memory rent = _getRent[contract_][tokenId];
-        uint256 weeklyFee = msg.value / numWeeks;
-
-        if (rent.owner == address(0)) revert NotRentable();
-        if (rent.startTime != 0) revert RentedItem();
-        if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC(rent.rentee);
-
-        if (rent.auctionType == AuctionType.Dutch) {
-            DutchAuction memory auction = _getDutchAuction[contract_][tokenId];
-
-            if (weeklyFee < auction.minPrice || weeklyFee == _getDutchAuctionPrice(auction)) revert WrongPaymentAmount();
-
-            _getRent[contract_][tokenId].weeklyFee = weeklyFee;
-            _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
-
-        } else if (rent.auctionType == AuctionType.English) {
-            EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
-
-            if (weeklyFee <= auction.maxBid) revert WrongPaymentAmount();
-
-            if (weeklyFee != auction.autoAcceptPrice) {
-                _getEnglishAuction[contract_][tokenId].maxBid = weeklyFee;
-                _getEnglishAuction[contract_][tokenId].maxBidder = msg.sender;
-                _getEnglishAuction[contract_][tokenId].collateral = msg.value;
-
-                (bool success, ) = auction.maxBidder.call{value: auction.collateral}("");
-                require(success);
-
-            } else {
-                _getRent[contract_][tokenId].weeklyFee = weeklyFee;
-                _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
-
-            }
-        } else revert NotAuctioned();
-    }
-
-    function endAuction(address contract_, uint256 tokenId) public payable {
-        RentData memory rent = _getRent[contract_][tokenId];
-        EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
-
-        if (rent.startTime != 0) revert RentedItem();
-        if (rent.auctionType != AuctionType.English || block.timestamp < auction.deadline) revert NotEndable();
-
-        _getRent[contract_][tokenId].weeklyFee = auction.maxBid;
-        _startRent(contract_, tokenId, rent.owner, auction.maxBidder, auction.collateral, true);
-
-        (bool success, ) = msg.sender.call{value: rent.payedFee * KEEPER_FEE / 100}("");
-        require(success);
     }
 }
