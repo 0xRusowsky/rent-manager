@@ -44,8 +44,8 @@ contract RentManager {
     struct DutchAuction {
         uint256 deadline;
         uint256 minPrice;
-        uint256 startPrice;
         uint256 startTime;
+        uint256 startPrice;
     }
 
     /// @notice Relevant auction information
@@ -313,17 +313,10 @@ contract RentManager {
         if (rent.startTime != 0) revert RentedItem();
         if (rent.rentee != address(0) && rent.rentee != msg.sender) revert OnlyRentableOTC(rent.rentee);
 
-        if (rent.auctionType == AuctionType.Dutch) {
-            DutchAuction memory auction = _getDutchAuction[contract_][tokenId];
-
-            if (weeklyFee < auction.minPrice || weeklyFee == _getDutchAuctionPrice(auction)) revert WrongPaymentAmount();
-
-            _getRent[contract_][tokenId].weeklyFee = weeklyFee;
-            _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
-
-        } else if (rent.auctionType == AuctionType.English) {
+        if (rent.auctionType == AuctionType.English) {
             EnglishAuction memory auction = _getEnglishAuction[contract_][tokenId];
 
+            if (block.timestamp > auction.deadline) revert OverDeadline();
             if (weeklyFee <= auction.maxBid) revert WrongPaymentAmount();
 
             if (weeklyFee != auction.autoAcceptPrice) {
@@ -339,6 +332,15 @@ contract RentManager {
                 _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
 
             }
+        } else if (rent.auctionType == AuctionType.Dutch) {
+            DutchAuction memory auction = _getDutchAuction[contract_][tokenId];
+
+            if (block.timestamp > auction.deadline) revert OverDeadline();
+            if (weeklyFee < auction.minPrice || weeklyFee != _getDutchAuctionPrice(auction)) revert WrongPaymentAmount();
+
+            _getRent[contract_][tokenId].weeklyFee = weeklyFee;
+            _startRent(contract_, tokenId, rent.owner, msg.sender, msg.value, false);
+
         } else revert NotAuctioned();
     }
 
@@ -563,10 +565,15 @@ contract RentManager {
     }
 
     function _getDutchAuctionPrice(DutchAuction memory auction) internal view returns (uint256) {
-        uint256 elapsedTime = (block.timestamp - auction.startTime) / 1 hours;
-        uint256 decreaseRate = (auction.startPrice - auction.minPrice) / ((auction.deadline - auction.startTime) / 1 hours);
+        if (block.timestamp < auction.deadline) {
+            uint256 elapsedTime = (block.timestamp - auction.startTime) / 1 hours;
+            uint256 decreaseRate = (auction.startPrice - auction.minPrice) / ((auction.deadline - auction.startTime) / 1 hours);
 
-        return auction.startPrice - decreaseRate * elapsedTime;
+            return auction.startPrice - decreaseRate * elapsedTime;
+
+        } else {
+            return auction.minPrice;
+        }
     }
 
     /// @notice Get the required payback to end a rent before closure

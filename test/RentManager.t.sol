@@ -10,6 +10,7 @@ contract ContractTest is Test {
     RentManager rent;
     address owner;
     address rentee;
+    address bidder;
     address keeper;
 
     function setUp() public {
@@ -22,7 +23,10 @@ contract ContractTest is Test {
         rentee = vm.addr(2);
         vm.deal(rentee, 100 ether);
         vm.label(rentee, "Rentee");
-        keeper = vm.addr(3);
+        bidder = vm.addr(3);
+        vm.deal(bidder, 100 ether);
+        vm.label(bidder, "Bidder");
+        keeper = vm.addr(4);
         vm.label(keeper, "Keeper");
         
         nft.mint(owner, 1);
@@ -204,10 +208,45 @@ contract ContractTest is Test {
         vm.stopPrank();
 
         //Start Rent
-        vm.startPrank(keeper);
-        vm.deal(keeper, 0.1 ether);
+        vm.startPrank(bidder);
         vm.expectRevert(abi.encodeWithSelector(RentManager.OnlyRentableOTC.selector, rentee));
         rent.startRent{value: 0.1 ether}(address(nft), 1);
+        vm.stopPrank();
+    }
+
+    function testStartRentWithDutchAuction() public {
+        vm.startPrank(owner);
+        nft.approve(address(rent), 1);
+        rent.depositWithDutchAuction(address(nft), 1, 123 weeks, 2 weeks, 0.1 ether, 1 ether);
+
+        assertTrue(nft.ownerOf(1) == address(rent));
+        assertFalse(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0);
+        assertTrue(rent.renteeOf(address(nft), 1) == address(0));
+        assertTrue(rent.auctionTypeOf(address(nft), 1) == RentManager.AuctionType.Dutch);
+        assertTrue(rent.getDutchAuction(address(nft), 1).startTime == 1);
+        vm.stopPrank();
+
+        //Start Rent
+        vm.warp(2 weeks);
+        vm.startPrank(rentee);
+        uint256 bid = rent.getDutchAuctionPrice(address(nft), 1);
+        assertTrue(bid == 0.1 ether);
+        rent.newBid{value: 0.1 ether}(address(nft), 1, 1);
+        address deleg = rent.getDelegation(address(nft));
+
+        assertTrue(nft.ownerOf(1) == deleg);
+        assertTrue(rent.isRented(address(nft), 1));
+        assertTrue(rent.ownerOf(address(nft), 1) == owner);
+        assertTrue(rent.deadlineOf(address(nft), 1) == 123 weeks);
+        assertTrue(rent.weeklyFeeOf(address(nft), 1) == 0.1 ether);
+        assertTrue(rent.renteeOf(address(nft), 1) == rentee);
+        assertTrue(rent.endDateOf(address(nft), 1) == 3 weeks);
+        assertTrue(rent.payedFeesOf(address(nft), 1) == 0.1 ether);
+        assertTrue(owner.balance == 100.099 ether);
+        assertTrue(rentee.balance == 99.9 ether);
         vm.stopPrank();
     }
 
@@ -253,12 +292,6 @@ contract ContractTest is Test {
         vm.expectRevert(RentManager.OverDeadline.selector);
         rent.extendRent{value: 124 * 0.1 ether}(address(nft), 1);
         vm.stopPrank();
-/*
-        vm.startPrank(owner);
-        vm.expectRevert("NOT_RENTEE");
-        rent.extendRent{value: 0.1 ether}(address(nft), 1);
-        vm.stopPrank();
-*/
     }
 
     function testEndRentEarly() public {
